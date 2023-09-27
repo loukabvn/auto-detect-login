@@ -30,9 +30,9 @@ LOGGED         = "is_logged"
 
 CSRF_TOKEN_SIZE = 32
 
-DEF_LOGIN_TEMPLATE = "login.html"
-CSRF_LOGIN_TEMPLATE    = "csrf_login.html"
-DEF_CSRF_TOKEN_NAME    = "csrf_token"
+DEF_LOGIN_TEMPLATE  = "login.html"
+CSRF_LOGIN_TEMPLATE = "csrf_login.html"
+DEF_CSRF_TOKEN_NAME = "csrf_token"
 USER_FIELD = "username"
 PWD_FIELD  = "password"
 
@@ -96,24 +96,27 @@ def basic_auth_protected():
 ###                             csrf_auth_login                              ###
 ################################################################################
 
+STORED_CSRF_TOKEN = None
+
 @app.route('/csrf_auth/login', methods=['GET', 'POST'])
 def csrf_auth_login():
+    global STORED_CSRF_TOKEN
     # POST
     if request.method == "POST":
-        stored_token = session.get(DEF_CSRF_TOKEN_NAME)
         received_token = request.form[DEF_CSRF_TOKEN_NAME]
         session.clear()
-        if check_request_creds(request) and stored_token == received_token:
+        if check_request_creds(request) and STORED_CSRF_TOKEN == received_token:
             session[LOGGED] = True
             return LOGIN_SUCCESS
         else:
             return LOGIN_FAILED, 401
     # GET
-    token = b64encode(random.randbytes(CSRF_TOKEN_SIZE)).decode()
-    session[DEF_CSRF_TOKEN_NAME] = token
-    return render_login(request.path,
+    STORED_CSRF_TOKEN = b64encode(random.randbytes(CSRF_TOKEN_SIZE)).decode()
+    return render_login(
+        request.path,
         template=CSRF_LOGIN_TEMPLATE, csrf_token_name=DEF_CSRF_TOKEN_NAME,
-        csrf_token=token)
+        csrf_token=STORED_CSRF_TOKEN
+    )
 
 @app.route('/csrf_auth/protected')
 @session_login_required
@@ -149,7 +152,7 @@ digest_auth = HTTPDigestAuth()
 
 @digest_auth.get_password
 def get_password(username):
-    return users.get(username)
+    return USERS.get(username)
 
 @app.route('/digest_auth/protected')
 @digest_auth.login_required
@@ -175,8 +178,8 @@ token_auth = HTTPTokenAuth()
 @token_auth.verify_token
 def verify_token(token):
     try:
-        r = jwt.decode(token, app.secret_key, algorithms=['HS256'])
-        return r
+        jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        return True
     except:
         return False
 
